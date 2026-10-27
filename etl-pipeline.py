@@ -5,7 +5,9 @@ from sqlalchemy import create_engine, text
 DB_URL = "postgresql://finance_user:PSWD@localhost:5433/finance_analytics"
 engine = create_engine(DB_URL)
 
-STOCKS = ["AAPL", "NVDA", "MSFT", "GOOGL", "AMZN", "TSM", "META", "AVGO", "SPCX", "LLY"]
+STOCKS = ["AAPL", "NVDA"]
+
+#, "MSFT", "GOOGL", "AMZN", "TSM", "META", "AVGO", "SPCX", "LLY"
 
 def load_assets():
     ticker_to_id = {}
@@ -32,3 +34,43 @@ def load_assets():
             result = conn.execute(insert_query , {"ticker": ticker, "name": company_name, "sector": sector})
             ticker_to_id[ticker] = result.fetchone()[0]
     return ticker_to_id
+
+def load_quotes(ticker_to_id):
+    with engine.begin() as conn:
+        for ticket, asset_id in ticker_to_id.items():
+            print(f"скачиваются кодировки {ticket}")
+
+            df = yf.download(ticker, period="3mo", progress=False)
+
+            if df.empty:
+                continue
+
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.droplevel(1)
+            df = df.reset_index()
+            df.columns = [c.lower() for c in df.columns]
+
+            records = []
+            for _, row in df.iterrow():
+                records.append({
+                    "asset_id": asset_id,
+                    "date": row['date'],
+                    "open": float(row['open']),
+                    "high": float(row['high']),
+                    "low": float(row['low']),
+                    "close": float(row['close']),
+                    "volume": int(row['volume'])
+                })
+            quotes_query = text("""
+                INSERT INTO quotes (asset_id, date, open, high, low, close, volume)
+                VALUES (:asset_id, :date, :open, :high, :low, :close, :volume)
+                ON CONFLICT (asset_id, date) DO NOTHING;
+            """)
+            conn.execute(quotes_query, records)
+            print(f"котировки {ticket} загружены")
+
+if __name__ == "__main__":
+    print("Начало ETL-процесса")
+    mapping = load_assets()
+    load_quotes(mapping)
+    print("ETL-процесс успешно завершен")
