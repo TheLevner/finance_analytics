@@ -5,16 +5,16 @@ from sqlalchemy import create_engine, text
 DB_URL = "postgresql://finance_user:PSWD@localhost:5433/finance_analytics"
 engine = create_engine(DB_URL)
 
-STOCKS = ["AAPL", "NVDA"]
+STOCKS = ["AAPL", "NVDA", "MSFT", "GOOGL", "AMZN", "TSM", "META", "AVGO", "SPCX", "LLY"]
 
-#, "MSFT", "GOOGL", "AMZN", "TSM", "META", "AVGO", "SPCX", "LLY"
+
 
 def load_assets():
     ticker_to_id = {}
 
     with engine.begin() as conn:
         for ticker in STOCKS:
-            select_query = text("SELECT id FROM assets WHEER ticker = :ticker")
+            select_query = text("SELECT id FROM assets WHERE ticker = :ticker")
             exist_row = conn.execute(select_query, {"ticker":ticker}).fetchone()
 
             if exist_row:
@@ -37,8 +37,8 @@ def load_assets():
 
 def load_quotes(ticker_to_id):
     with engine.begin() as conn:
-        for ticket, asset_id in ticker_to_id.items():
-            print(f"скачиваются кодировки {ticket}")
+        for ticker, asset_id in ticker_to_id.items():
+            print(f"скачиваются кодировки {ticker}")
 
             df = yf.download(ticker, period="3mo", progress=False)
 
@@ -51,7 +51,7 @@ def load_quotes(ticker_to_id):
             df.columns = [c.lower() for c in df.columns]
 
             records = []
-            for _, row in df.iterrow():
+            for _, row in df.iterrows():
                 records.append({
                     "asset_id": asset_id,
                     "date": row['date'],
@@ -67,7 +67,7 @@ def load_quotes(ticker_to_id):
                 ON CONFLICT (asset_id, date) DO NOTHING;
             """)
             conn.execute(quotes_query, records)
-            print(f"котировки {ticket} загружены")
+            print(f"котировки {ticker} загружены")
 
 if __name__ == "__main__":
     print("Начало ETL-процесса")
